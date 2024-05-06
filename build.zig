@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
     const formats = b.option([]const u8, "formats", "Comma separated list of enabled formats or \"all\", for example: STL,3MF,Obj") orelse "";
     const use_double_precision = b.option(bool, "double", "All data will be stored as double values") orelse false;
+
     const assimp = b.dependency("assimp", .{});
 
     const lib = b.addStaticLibrary(.{
@@ -23,6 +24,7 @@ pub fn build(b: *std.Build) !void {
         },
         .{ .ASSIMP_DOUBLE_PRECISION = use_double_precision },
     );
+
     lib.addConfigHeader(config_h);
     lib.addIncludePath(assimp.path("include"));
     lib.addIncludePath(.{ .path = "include" });
@@ -38,28 +40,19 @@ pub fn build(b: *std.Build) !void {
 
     lib.defineCMacro("RAPIDJSON_HAS_STDSTRING", "1");
 
-    lib.installConfigHeader(config_h, .{});
-    lib.installHeadersDirectoryOptions(.{
-        .source_dir = assimp.path("include"),
-        .install_subdir = "",
-        .install_dir = .header,
-    });
+    lib.installConfigHeader(config_h);
 
-    lib.installHeadersDirectoryOptions(.{
-        .source_dir = .{ .path = "include" },
-        .install_subdir = "",
-        .install_dir = .header,
-    });
+    lib.installHeadersDirectory(assimp.path("include"), "", .{ .include_extensions = &.{ ".h", ".hpp", ".inl", ".in" } });
 
     lib.addCSourceFiles(.{
-        .dependency = assimp,
+        .root = assimp.path(""),
         .files = &sources.common,
         .flags = &.{},
     });
 
     inline for (comptime std.meta.declarations(sources.libraries)) |ext_lib| {
         lib.addCSourceFiles(.{
-            .dependency = assimp,
+            .root = assimp.path(""),
             .files = &@field(sources.libraries, ext_lib.name),
             .flags = &.{},
         });
@@ -69,6 +62,7 @@ pub fn build(b: *std.Build) !void {
     var enabled_formats = std.BufSet.init(b.allocator);
     defer enabled_formats.deinit();
     var tokenizer = std.mem.tokenize(u8, formats, ",");
+
     while (tokenizer.next()) |format| {
         if (std.mem.eql(u8, format, "all")) {
             enable_all = true;
@@ -97,7 +91,8 @@ pub fn build(b: *std.Build) !void {
 
         if (enabled) {
             lib.addCSourceFiles(.{
-                .dependency = assimp,
+                // .dependency = assimp,
+                .root = assimp.path(""),
                 .files = &@field(sources.formats, format_files.name),
                 .flags = &.{},
             });
