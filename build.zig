@@ -3,7 +3,11 @@ const std = @import("std");
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // zig build -Dformats="Obj,Collada"
     const formats = b.option([]const u8, "formats", "Comma separated list of enabled formats or \"all\", for example: STL,3MF,Obj") orelse "";
+    std.debug.print("Selected formats: {s}\n", .{formats});
+
     const use_double_precision = b.option(bool, "double", "All data will be stored as double values") orelse false;
 
     const assimp = b.dependency("assimp", .{});
@@ -37,6 +41,7 @@ pub fn build(b: *std.Build) !void {
     lib.addIncludePath(assimp.path("contrib/unzip"));
     lib.addIncludePath(assimp.path("contrib/zlib"));
     lib.addIncludePath(assimp.path("contrib/openddlparser/include"));
+    lib.addIncludePath(assimp.path("contrib/utf8cpp/source"));
 
     lib.defineCMacro("RAPIDJSON_HAS_STDSTRING", "1");
 
@@ -58,9 +63,13 @@ pub fn build(b: *std.Build) !void {
         });
     }
 
+    // DASSIMP_BUILD_ASSIMP_TOOLS=ON
+
     var enable_all = false;
+
     var enabled_formats = std.BufSet.init(b.allocator);
     defer enabled_formats.deinit();
+
     var tokenizer = std.mem.tokenize(u8, formats, ",");
 
     while (tokenizer.next()) |format| {
@@ -91,7 +100,6 @@ pub fn build(b: *std.Build) !void {
 
         if (enabled) {
             lib.addCSourceFiles(.{
-                // .dependency = assimp,
                 .root = assimp.path(""),
                 .files = &@field(sources.formats, format_files.name),
                 .flags = &.{},
@@ -120,6 +128,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+
     example_cpp.addCSourceFile(.{
         .file = .{ .path = "src/example.cpp" },
         .flags = &[_][]const u8{"-std=c++17"},
@@ -141,6 +150,18 @@ pub fn build(b: *std.Build) !void {
     example_c.linkLibrary(lib);
     example_c.linkLibC();
     b.installArtifact(example_c);
+
+    const zig_example = b.addExecutable(.{
+        .name = "zig-example",
+        .root_source_file = .{ .path = "src/example.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // zig_example.addIncludePath(assimp.path(""));
+    zig_example.linkLibrary(lib);
+
+    b.installArtifact(zig_example);
 }
 
 const unsupported_formats = [_][]const u8{
